@@ -2,7 +2,6 @@ import os
 import uuid
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # --- LLM and LangChain Imports ---
@@ -15,17 +14,10 @@ from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 load_dotenv()
 api_key = os.getenv('OPENROUTESERVICE_API_KEY')
 
-# NOTE: FastAPI app is now just 'app', which Vercel expects
+# Vercel expects the FastAPI object to be named 'app'
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# In-memory storage for interview sessions
 sessions = {}
 
 # --- 2. LLM and Chain Definitions ---
@@ -36,7 +28,7 @@ llm = ChatOpenAI(
     openai_api_base="https://openrouter.ai/api/v1",
 )
 
-# --- Dynamic Question Generation ---
+# --- Dynamic Question Generation Chain ---
 dynamic_question_prompt = PromptTemplate(
     template="""You are an expert interviewer. Your goal is to conduct a natural, flowing interview.
     Based on the candidate's resume and the conversation so far, ask the NEXT most relevant interview question.
@@ -53,14 +45,13 @@ dynamic_question_prompt = PromptTemplate(
 )
 dynamic_question_chain = dynamic_question_prompt | llm | StrOutputParser()
 
-# --- HR Feedback Agent ---
+# --- HR Feedback Agent Chain ---
 hr_feedback_schema = [
     ResponseSchema(name="Communication Skills", description="Evaluate clarity, articulation, and listening. Rate out of 5 and justify."),
     ResponseSchema(name="Confidence and Professionalism", description="Assess confidence, tone, and professional demeanor. Rate out of 5 and justify."),
     ResponseSchema(name="Behavioral Competencies", description="Comment on teamwork, problem-solving, and attitude based on answers.")
 ]
 hr_parser = StructuredOutputParser.from_response_schemas(hr_feedback_schema)
-
 hr_prompt = PromptTemplate(
     template="""You are an HR Manager. Analyze the following interview transcript from a behavioral and communication perspective.
     Do NOT judge technical skills. Focus on soft skills and culture fit.
@@ -74,14 +65,13 @@ hr_prompt = PromptTemplate(
 )
 hr_feedback_chain = hr_prompt | llm | hr_parser
 
-# --- Technical Feedback Agent ---
+# --- Technical Feedback Agent Chain ---
 tech_feedback_schema = [
     ResponseSchema(name="Technical Knowledge", description="Evaluate understanding of concepts from their resume and answers. Rate out of 5 and justify."),
     ResponseSchema(name="Project Understanding", description="Assess how well they explained their projects, role, and technologies. Rate out of 5 and justify."),
     ResponseSchema(name="Problem-Solving Approach", description="Comment on their approach to technical questions and articulating solutions.")
 ]
 tech_parser = StructuredOutputParser.from_response_schemas(tech_feedback_schema)
-
 tech_prompt = PromptTemplate(
     template="""You are a Senior Technical Lead. Analyze the following interview transcript from a purely technical standpoint.
     Do NOT judge soft skills. Focus on technical accuracy, depth, and problem-solving skills.
@@ -105,7 +95,7 @@ class AnswerRequest(BaseModel):
 
 # --- 4. API Endpoints ---
 
-@app.post("/api/start_interview")
+@app.post("/start_interview")
 async def start_interview(request: StartRequest):
     """
     Creates a session with the provided resume text and returns the first question.
@@ -122,7 +112,7 @@ async def start_interview(request: StartRequest):
     
     return {"session_id": session_id, "question": intro_question}
 
-@app.post("/api/submit_answer")
+@app.post("/submit_answer")
 async def submit_answer(request: AnswerRequest):
     """Submits an answer and gets the next question or final feedback."""
     session_id = request.session_id
