@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Mock Interview</title>
+    <script src="https://mozilla.github.io/pdf.js/build/pdf.mjs" type="module"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        main { width: 100%; max-width: 800px; height: 90vh; background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; text-align: center; box-sizing: border-box; }
+        .hidden { display: none !important; }
+        .status { font-size: 1.5rem; color: #333; margin-bottom: 20px; }
+        .transcript-container { font-size: 1.1rem; color: #666; min-height: 50px; width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #e0e0e0; border-radius: 8px; background-color: #f9f9f9; }
+        .listening-indicator { font-size: 1rem; color: #007bff; font-weight: bold; margin-top: 15px; }
+        .upload-label { display: inline-block; padding: 15px 30px; background-color: #28a745; color: white; border-radius: 8px; cursor: pointer; }
+        .feedback-panel { text-align: left; width: 100%; height: 100%; overflow-y: auto; }
+        .feedback-section { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        h1, h2, h3 { color: #333; }
+        p { color: #555; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+    <main id="container">
+        <div id="upload-view">
+            <h1 class="status">Upload Your Resume to Begin</h1>
+            <label for="resume-file" class="upload-label">Select PDF Resume</label>
+            <input type="file" id="resume-file" accept=".pdf" style="display: none;">
+        </div>
+
+        <div id="interview-view" class="hidden">
+            <h2 id="question-text" class="status"></h2>
+            <div class="transcript-container">
+                <p id="transcript"></p>
+            </div>
+            <p id="listening-indicator" class="listening-indicator hidden">🎙️ Listening...</p>
+        </div>
+
+        <div id="feedback-view" class="hidden feedback-panel"></div>
+    </main>
+
+    <script type="module">
+        // --- Import pdf.js ---
+        import * as pdfjsLib from "https://mozilla.github.io/pdf.js/build/pdf.mjs";
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
+
+        // --- DOM Elements ---
+        const uploadView = document.getElementById('upload-view');
+        const resumeFileInput = document.getElementById('resume-file');
+        const interviewView = document.getElementById('interview-view');
+        const questionText = document.getElementById('question-text');
+        const transcriptText = document.getElementById('transcript');
+        const listeningIndicator = document.getElementById('listening-indicator');
+        const feedbackView = document.getElementById('feedback-view');
+
+        // --- State ---
+        let sessionId = null;
+        let inactivityTimer;
+
+        // --- Text-to-Speech (TTS) ---
+        function speak(text) {
+            return new Promise((resolve, reject) => {
+                if (!text) {
+                    resolve();
+                    return;
+                }
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.onend = resolve;
+                utterance.onerror = (e) => {
+                    console.error("Speech synthesis error", e);
+                    reject(e);
+                };
+                window.speechSynthesis.speak(utterance);
+            });
+        }
+
+        // --- Speech-to-Text (STT) with Inactivity Timer ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        let finalTranscript = '';
+        recognition.onresult = (event) => {
+            clearTimeout(inactivityTimer);
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript.trim() + ' ';
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            transcriptText.textContent = finalTranscript + interimTranscript;
+            inactivityTimer = setTimeout(() => recognition.stop(), 2000);
+        };
+        
+        function listen() {
+            return new Promise((resolve, reject) => {
+                finalTranscript = '';
+                transcriptText.textContent = '';
+                listeningIndicator.classList.remove('hidden');
+                
+                recognition.start();
+
+                recognition.onend = () => {
+                    listeningIndicator.classList.add('hidden');
+                    resolve(finalTranscript.trim());
+                };
+                recognition.onerror = (event) => {
+                    console.error("Speech recognition error", event.error);
+                    listeningIndicator.classList.add('hidden');
+                    reject(event.error);
+                };
+            });
+        }
+        
+        // --- App Logic ---
+        resumeFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            questionText.textContent = '⚙️ Processing Resume...';
+            uploadView.classList.add('hidden');
+            interviewView.classList.remove('hidden');
+
+            const fileReader = new FileReader();
+            fileReader.onload = async function() {
+                try {
+                    const typedarray = new Uint8Array(this.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let resumeText = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        resumeText += textContent.items.map(s => s.str).join(' ');
+                    }
+                    
+                    const response = await fetch(`/api/start_interview`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ resume_text: resumeText })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.detail);
+
+                    sessionId = data.session_id;
+                    await speak("Resume processed. Let's start the interview.");
+                    await processQuestion(data.question);
+                } catch(error) {
+                    questionText.textContent = `Error: ${error.message}`;
+                    await speak(`There was an error processing your resume.`);
+                }
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
+
+        async function processQuestion(question) {
+            questionText.textContent = question;
+            try {
+                await speak(question);
+                const answer = await listen();
+                
+                if (answer) {
+                    questionText.textContent = "Processing your answer...";
+                    const response = await fetch(`/api/submit_answer`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: sessionId, answer: answer })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.detail);
+
+                    if (data.interview_over) {
+                        processFeedback(data.feedback);
+                    } else {
+                        await processQuestion(data.question);
+                    }
+                } else {
+                    await speak("I didn't catch that. Let's try the next question.");
+                    const response = await fetch(`/api/submit_answer`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session_id: sessionId, answer: "(No answer provided)" })
+                    });
+                    const data = await response.json();
+                    if (data.interview_over) {
+                        processFeedback(data.feedback);
+                    } else {
+                        await processQuestion(data.question);
+                    }
+                }
+            } catch(error) {
+                questionText.textContent = `An error occurred: ${error.message}`;
+                await speak("Sorry, a technical error occurred. Please refresh to try again.");
+            }
+        }
+
+        function processFeedback(feedback) {
+            interviewView.classList.add('hidden');
+            feedbackView.classList.remove('hidden');
+
+            const hrFeedback = feedback.hr_feedback;
+            const techFeedback = feedback.tech_feedback;
+            
+            let feedbackHTML = '<h2>Feedback Panel</h2>';
+            
+            feedbackHTML += '<div class="feedback-section"><h3>HR Manager\'s Feedback</h3>';
+            for (const [key, value] of Object.entries(hrFeedback)) {
+                feedbackHTML += `<p><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</p>`;
+            }
+            feedbackHTML += '</div>';
+
+            feedbackHTML += '<div class="feedback-section"><h3>Technical Lead\'s Feedback</h3>';
+            for (const [key, value] of Object.entries(techFeedback)) {
+                feedbackHTML += `<p><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</p>`;
+            }
+            feedbackHTML += '</div>';
+
+            feedbackView.innerHTML = feedbackHTML;
+        }
+    </script>
+</body>
+</html>
