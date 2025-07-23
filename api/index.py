@@ -3,6 +3,8 @@ import uuid
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # --- LLM and LangChain Imports ---
 from langchain_openai import ChatOpenAI
@@ -19,7 +21,7 @@ app = FastAPI()
 
 # In-memory storage for interview sessions
 sessions = {}
-
+app.mount("/static", StaticFiles(directory="../static"), name="static")
 # --- 2. LLM and Chain Definitions ---
 
 llm = ChatOpenAI(
@@ -95,7 +97,7 @@ class AnswerRequest(BaseModel):
 
 # --- 4. API Endpoints ---
 
-@app.post("/start_interview")
+@app.post("/api//start_interview")
 async def start_interview(request: StartRequest):
     """
     Creates a session with the provided resume text and returns the first question.
@@ -112,7 +114,7 @@ async def start_interview(request: StartRequest):
     
     return {"session_id": session_id, "question": intro_question}
 
-@app.post("/submit_answer")
+@app.post("/api/submit_answer")
 async def submit_answer(request: AnswerRequest):
     """Submits an answer and gets the next question or final feedback."""
     session_id = request.session_id
@@ -140,3 +142,6 @@ async def submit_answer(request: AnswerRequest):
     
     session["history"].append(f"Interviewer: {next_question}")
     return {"interview_over": False, "question": next_question}
+@app.get("/")
+async def serve_frontend():
+    return FileResponse("../static/index.html")
