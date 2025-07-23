@@ -1,8 +1,10 @@
 {
     "builds": [
       {
-        "src": "api/index.py",
+        "src": "Mock-Interview-System/api/index.py",
         "use": "@vercel/python"
       }
     ]
   }
+
+  
