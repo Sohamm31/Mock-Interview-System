@@ -3,7 +3,6 @@ import uuid
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 # --- LLM and LangChain Imports ---
@@ -16,13 +15,20 @@ from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 load_dotenv()
 api_key = os.getenv('OPENROUTESERVICE_API_KEY')
 
-# Vercel expects the FastAPI object to be named 'app'
 app = FastAPI()
 
 # In-memory storage for interview sessions
 sessions = {}
-app.mount("/static", StaticFiles(directory="../static"), name="static")
-# --- 2. LLM and Chain Definitions ---
+
+# --- 2. Serve the Frontend ---
+@app.get("/")
+async def serve_frontend():
+    """Serves the index.html file for the root URL."""
+    # This assumes your index.html is inside a 'static' folder
+    # in your project's root directory.
+    return FileResponse('static/index.html')
+
+# --- 3. LLM and Chain Definitions ---
 
 llm = ChatOpenAI(
     model_name="deepseek/deepseek-r1-0528-qwen3-8b:free",
@@ -49,9 +55,9 @@ dynamic_question_chain = dynamic_question_prompt | llm | StrOutputParser()
 
 # --- HR Feedback Agent Chain ---
 hr_feedback_schema = [
-    ResponseSchema(name="Communication Skills", description="Evaluate clarity, articulation, and listening. Rate out of 5 and justify."),
-    ResponseSchema(name="Confidence and Professionalism", description="Assess confidence, tone, and professional demeanor. Rate out of 5 and justify."),
-    ResponseSchema(name="Behavioral Competencies", description="Comment on teamwork, problem-solving, and attitude based on answers.")
+    ResponseSchema(name="Communication_Skills", description="Evaluate clarity, articulation, and listening. Rate out of 5 and justify."),
+    ResponseSchema(name="Confidence_and_Professionalism", description="Assess confidence, tone, and professional demeanor. Rate out of 5 and justify."),
+    ResponseSchema(name="Behavioral_Competencies", description="Comment on teamwork, problem-solving, and attitude based on answers.")
 ]
 hr_parser = StructuredOutputParser.from_response_schemas(hr_feedback_schema)
 hr_prompt = PromptTemplate(
@@ -69,9 +75,9 @@ hr_feedback_chain = hr_prompt | llm | hr_parser
 
 # --- Technical Feedback Agent Chain ---
 tech_feedback_schema = [
-    ResponseSchema(name="Technical Knowledge", description="Evaluate understanding of concepts from their resume and answers. Rate out of 5 and justify."),
-    ResponseSchema(name="Project Understanding", description="Assess how well they explained their projects, role, and technologies. Rate out of 5 and justify."),
-    ResponseSchema(name="Problem-Solving Approach", description="Comment on their approach to technical questions and articulating solutions.")
+    ResponseSchema(name="Technical_Knowledge", description="Evaluate understanding of concepts from their resume and answers. Rate out of 5 and justify."),
+    ResponseSchema(name="Project_Understanding", description="Assess how well they explained their projects, role, and technologies. Rate out of 5 and justify."),
+    ResponseSchema(name="Problem_Solving_Approach", description="Comment on their approach to technical questions and articulating solutions.")
 ]
 tech_parser = StructuredOutputParser.from_response_schemas(tech_feedback_schema)
 tech_prompt = PromptTemplate(
@@ -87,7 +93,7 @@ tech_prompt = PromptTemplate(
 )
 tech_feedback_chain = tech_prompt | llm | tech_parser
 
-# --- 3. Pydantic Models ---
+# --- 4. Pydantic Models ---
 class StartRequest(BaseModel):
     resume_text: str
 
@@ -95,9 +101,10 @@ class AnswerRequest(BaseModel):
     session_id: str
     answer: str
 
-# --- 4. API Endpoints ---
+# --- 5. API Endpoints ---
 
-@app.post("/api//start_interview")
+# --- FIXED: Removed the extra slash ---
+@app.post("/api/start_interview")
 async def start_interview(request: StartRequest):
     """
     Creates a session with the provided resume text and returns the first question.
@@ -142,6 +149,3 @@ async def submit_answer(request: AnswerRequest):
     
     session["history"].append(f"Interviewer: {next_question}")
     return {"interview_over": False, "question": next_question}
-@app.get("/")
-async def serve_frontend():
-    return FileResponse("../static/index.html")

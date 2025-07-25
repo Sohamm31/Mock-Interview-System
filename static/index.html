@@ -20,14 +20,12 @@
     </style>
 </head>
 <body>
-
     <main id="container">
         <div id="upload-view">
             <h1 class="status">Upload Your Resume to Begin</h1>
             <label for="resume-file" class="upload-label">Select PDF Resume</label>
             <input type="file" id="resume-file" accept=".pdf" style="display: none;">
         </div>
-
         <div id="interview-view" class="hidden">
             <h2 id="question-text" class="status"></h2>
             <div class="transcript-container">
@@ -35,16 +33,12 @@
             </div>
             <p id="listening-indicator" class="listening-indicator hidden">🎙️ Listening...</p>
         </div>
-
         <div id="feedback-view" class="hidden feedback-panel"></div>
     </main>
-
     <script type="module">
-        // --- Import pdf.js ---
         import * as pdfjsLib from "https://mozilla.github.io/pdf.js/build/pdf.mjs";
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://mozilla.github.io/pdf.js/build/pdf.worker.mjs`;
 
-        // --- DOM Elements ---
         const uploadView = document.getElementById('upload-view');
         const resumeFileInput = document.getElementById('resume-file');
         const interviewView = document.getElementById('interview-view');
@@ -53,33 +47,23 @@
         const listeningIndicator = document.getElementById('listening-indicator');
         const feedbackView = document.getElementById('feedback-view');
 
-        // --- State ---
         let sessionId = null;
         let inactivityTimer;
 
-        // --- Text-to-Speech (TTS) ---
         function speak(text) {
             return new Promise((resolve, reject) => {
-                if (!text) {
-                    resolve();
-                    return;
-                }
+                if (!text) { resolve(); return; }
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.onend = resolve;
-                utterance.onerror = (e) => {
-                    console.error("Speech synthesis error", e);
-                    reject(e);
-                };
+                utterance.onerror = (e) => { console.error("Speech synthesis error", e); reject(e); };
                 window.speechSynthesis.speak(utterance);
             });
         }
 
-        // --- Speech-to-Text (STT) with Inactivity Timer ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
-
         let finalTranscript = '';
         recognition.onresult = (event) => {
             clearTimeout(inactivityTimer);
@@ -100,30 +84,18 @@
                 finalTranscript = '';
                 transcriptText.textContent = '';
                 listeningIndicator.classList.remove('hidden');
-                
                 recognition.start();
-
-                recognition.onend = () => {
-                    listeningIndicator.classList.add('hidden');
-                    resolve(finalTranscript.trim());
-                };
-                recognition.onerror = (event) => {
-                    console.error("Speech recognition error", event.error);
-                    listeningIndicator.classList.add('hidden');
-                    reject(event.error);
-                };
+                recognition.onend = () => { listeningIndicator.classList.add('hidden'); resolve(finalTranscript.trim()); };
+                recognition.onerror = (event) => { console.error("Speech recognition error", event.error); listeningIndicator.classList.add('hidden'); reject(event.error); };
             });
         }
         
-        // --- App Logic ---
         resumeFileInput.addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (!file) return;
-
             questionText.textContent = '⚙️ Processing Resume...';
             uploadView.classList.add('hidden');
             interviewView.classList.remove('hidden');
-
             const fileReader = new FileReader();
             fileReader.onload = async function() {
                 try {
@@ -135,7 +107,6 @@
                         const textContent = await page.getTextContent();
                         resumeText += textContent.items.map(s => s.str).join(' ');
                     }
-                    
                     const response = await fetch(`/api/start_interview`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -143,7 +114,6 @@
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.detail);
-
                     sessionId = data.session_id;
                     await speak("Resume processed. Let's start the interview.");
                     await processQuestion(data.question);
@@ -160,7 +130,6 @@
             try {
                 await speak(question);
                 const answer = await listen();
-                
                 if (answer) {
                     questionText.textContent = "Processing your answer...";
                     const response = await fetch(`/api/submit_answer`, {
@@ -170,7 +139,6 @@
                     });
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.detail);
-
                     if (data.interview_over) {
                         processFeedback(data.feedback);
                     } else {
@@ -199,24 +167,19 @@
         function processFeedback(feedback) {
             interviewView.classList.add('hidden');
             feedbackView.classList.remove('hidden');
-
             const hrFeedback = feedback.hr_feedback;
             const techFeedback = feedback.tech_feedback;
-            
             let feedbackHTML = '<h2>Feedback Panel</h2>';
-            
             feedbackHTML += '<div class="feedback-section"><h3>HR Manager\'s Feedback</h3>';
             for (const [key, value] of Object.entries(hrFeedback)) {
                 feedbackHTML += `<p><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</p>`;
             }
             feedbackHTML += '</div>';
-
             feedbackHTML += '<div class="feedback-section"><h3>Technical Lead\'s Feedback</h3>';
             for (const [key, value] of Object.entries(techFeedback)) {
                 feedbackHTML += `<p><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</p>`;
             }
             feedbackHTML += '</div>';
-
             feedbackView.innerHTML = feedbackHTML;
         }
     </script>
