@@ -6,3 +6,4 @@ langchain-openai
 langchain
 langchain-core
 pypdf
+gunicorn
