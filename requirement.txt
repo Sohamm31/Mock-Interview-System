@@ -1,0 +1,15 @@
+fastapi[all]
+uvicorn
+python-docx
+pypdf2
+langchain-openai
+langchain-community
+chromadb==0.4.24
+sentence-transformers==2.7.0
+gitpython
+pymysql # For local MySQL development
+psycopg2-binary # For Render PostgreSQL
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
+python-dotenv

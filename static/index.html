@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Mock Interview System</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Centering the entire app */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        #app {
+            /* Max width for content, centered */
+            max-width: 90%;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        /* NEW: Hide all screens inside #app by default until JS takes over */
+        #app > div:not(#modal-overlay) {
+            display: none; /* Hide all direct children of #app except the modal */
+        }
+        /* NEW: Class added by JS to show the app content */
+        #app.initialized > div:not(#modal-overlay) {
+            display: none; /* Keep all hidden by default, JS will manage specific screen visibility */
+        }
+        #app.initialized #auth-screen:not(.hidden),
+        #app.initialized #main-menu-screen:not(.hidden),
+        #app.initialized #upload-screen:not(.hidden),
+        #app.initialized #interview-screen:not(.hidden),
+        #app.initialized #feedback-screen:not(.hidden),
+        #app.initialized #history-screen:not(.hidden) {
+            display: flex; /* Use flex for screen-card if it's a flex container */
+            /* Or display: block; depending on screen-card's internal display */
+            /* For screen-card, it's already flex-col, so flex is appropriate */
+            flex-direction: column; /* Ensure original flex direction is maintained */
+        }
+
+
+        @media (min-width: 768px) {
+            #app {
+                max-width: 800px; /* Larger max-width on desktop */
+            }
+        }
+
+        /* Card-like styling for screens */
+        .screen-card {
+            background-color: #ffffff;
+            padding: 2.5rem; /* Increased padding */
+            border-radius: 1.5rem; /* More rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Stronger shadow */
+            width: 100%;
+            max-width: 500px; /* Max width for auth/menu screens */
+        }
+        #interview-screen {
+            max-width: 900px; /* Wider for chat */
+            height: 80vh; /* Fixed height for interview screen */
+            /* display: flex; REMOVED from here, handled by JS now */
+            flex-direction: column;
+        }
+
+        /* Chat bubbles */
+        .chat-box {
+            flex-grow: 1;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb; /* Light border */
+            border-radius: 0.75rem; /* Rounded corners */
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            background-color: #f9fafb; /* Slightly off-white for chat background */
+        }
+        .chat-bubble {
+            max-width: 85%; /* Slightly wider bubbles */
+            padding: 0.85rem 1.25rem; /* More padding */
+            border-radius: 1.5rem; /* More rounded */
+            margin-bottom: 0.75rem;
+            word-wrap: break-word;
+            font-size: 0.95rem; /* Slightly smaller font for chat */
+        }
+        .ai-bubble {
+            background-color: #e0f7fa; /* Lighter cyan-like blue */
+            color: #263238; /* Darker text */
+            align-self: flex-start;
+            border-bottom-left-radius: 0.5rem; /* Less rounded on bottom-left for AI */
+        }
+        .user-bubble {
+            background-color: #6366f1; /* Indigo-500 */
+            color: #ffffff;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.5rem; /* Less rounded on bottom-right for user */
+        }
+
+        /* Feedback sections */
+        .feedback-section {
+            background-color: #f0f4f8;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05); /* Inner shadow */
+            margin-top: 1.5rem;
+        }
+        .feedback-section h3 {
+            color: #2d3748;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+        .feedback-section ul {
+            list-style: disc;
+            margin-left: 1.5rem;
+            color: #4a5563;
+        }
+        .feedback-section li {
+            margin-bottom: 0.4rem;
+            font-size: 0.9rem;
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background-color: #4f46e5; /* indigo-600 */
+            color: #ffffff;
+            font-weight: 600; /* semi-bold */
+            padding: 0.75rem 1.5rem; /* py-3 px-6 */
+            border-radius: 0.75rem; /* rounded-lg */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* shadow-md */
+            transition: all 0.2s ease-in-out;
+            border: none; /* Ensure no default button border */
+            cursor: pointer;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* indigo-700 */
+            box-shadow: 0 6px 8px -2px rgba(0, 0, 0, 0.15), 0 3px 5px -1px rgba(0, 0, 0, 0.08); /* shadow-lg */
+            transform: translateY(-1px);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background-color: #e5e7eb; /* gray-200 */
+            color: #374151; /* gray-700 */
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease-in-out;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-secondary:hover {
+            background-color: #d1d5db; /* gray-300 */
+            transform: translateY(-1px);
+        }
+        .btn-secondary:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        /* Input fields (mostly removed now, but keeping styles for consistency) */
+        .input-field {
+            border: 1px solid #d1d5db; /* border-gray-300 */
+            border-radius: 0.5rem; /* rounded-lg */
+            padding: 0.6rem 1rem; /* py-2.5 px-4 */
+            width: 100%;
+            font-size: 1rem;
+            color: #374151; /* text-gray-700 */
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+            transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #6366f1; /* indigo-500 */
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); /* focus-ring */
+        }
+        .input-field:disabled {
+            background-color: #e5e7eb; /* gray-200 */
+            cursor: not-allowed;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Darker overlay */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #ffffff;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); /* Stronger modal shadow */
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+        }
+        .loader {
+            border: 4px solid #e0e7ff; /* Light indigo */
+            border-top: 4px solid #4f46e5; /* Indigo-600 */
+            border-radius: 50%;
+            width: 40px; /* Larger loader */
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 1.5rem auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* History items */
+        .history-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            background-color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+            color: #374151;
+        }
+        .history-item-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            font-size: 0.85rem;
+            color: #4b5563;
+        }
+        .history-item-body.expanded {
+            max-height: 1000px; /* Adjust as needed */
+            transition: max-height 0.5s ease-in;
+        }
+        .history-item-body h4 {
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            color: #2d3748;
+        }
+        .history-item-body ul {
+            list-style: disc;
+            margin-left: 1.25rem;
+            font-size: 0.8rem;
+        }
+        .history-item-body p {
+            margin-bottom: 0.3rem;
+        
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app" class="flex-grow">
+
+        <!-- Auth Screen -->
+        <div id="auth-screen" class="screen-card hidden">
+            <h1 class="text-3xl font-bold mb-6 text-indigo-700 text-center">AI Mock Interview</h1>
+            <div id="login-form">
+                <h2 class="text-2xl font-bold mb-4 text-gray-700 text-center">Login</h2>
+                <div class="mb-4">
+                    <label for="login-username" class="block text-gray-700 text-sm font-bold mb-2">Username:</label>
+                    <input type="text" id="login-username" class="input-field" placeholder="Enter your username">
+                </div>
+                <div class="mb-6">
+                    <label for="login-password" class="block text-gray-700 text-sm font-bold mb-2">Password:</label>
+                    <input type="password" id="login-password" class="input-field" placeholder="Enter your password">
+                </div>
+                <button id="login-button" class="btn-primary w-full mb-4">Login</button>
+                <p class="text-center text-gray-600">Dont have an account? <a href="#" id="show-register" class="text-indigo-600 hover:underline">Register here</a></p>
+            </div>
+
+            <div id="register-form" class="hidden">
+                <h2 class="text-2xl font-bold mb-4 text-gray-700 text-center">Register</h2>
+                <div class="mb-4">
+                    <label for="register-username" class="block text-gray-700 text-sm font-bold mb-2">Username:</label>
+                    <input type="text" id="register-username" class="input-field" placeholder="Choose a username">
+                </div>
+                <div class="mb-6">
+                    <label for="register-password" class="block text-gray-700 text-sm font-bold mb-2">Password:</label>
+                    <input type="password" id="register-password" class="input-field" placeholder="Choose a password">
+                </div>
+                <button id="register-button" class="btn-primary w-full mb-4">Register</button>
+                <p class="text-center text-gray-600">Already have an account? <a href="#" id="show-login" class="text-indigo-600 hover:underline">Login here</a></p>
+            </div>
+        </div>
+
+        <!-- Main Menu Screen (after login) -->
+        <div id="main-menu-screen" class="screen-card hidden">
+            <h1 class="text-4xl font-bold mb-4 text-indigo-700 text-center">AI Mock Interview System</h1>
+            <p class="text-lg mb-8 text-gray-600">Choose your next step:</p>
+            <div class="space-y-4">
+                <button id="start-new-interview-button" class="btn-primary text-xl px-8 py-3 w-64">Start New Interview</button>
+                <button id="view-history-button" class="btn-secondary text-xl px-8 py-3 w-64">View Interview History</button>
+                <button id="logout-button" class="btn-secondary text-xl px-8 py-3 w-64">Logout</button>
+            </div>
+        </div>
+
+        <!-- Resume Upload Screen -->
+        <div id="upload-screen" class="screen-card hidden">
+            <h2 class="text-2xl font-bold mb-6 text-indigo-700 text-center">Upload Your Resume</h2>
+            <div class="mb-4">
+                <label for="resume-file-input" class="block text-gray-700 text-sm font-bold mb-2">
+                    Select Resume (PDF, DOCX, TXT):
+                </label>
+                <input type="file" id="resume-file-input" accept=".pdf,.docx,.txt" class="input-field cursor-pointer">
+            </div>
+            <button id="upload-resume-button" class="btn-primary w-full">Upload & Prepare Interview</button>
+            <p id="upload-status" class="text-center text-sm mt-4 text-gray-600"></p>
+        </div>
+
+        <!-- Interview Screen -->
+        <div id="interview-screen" class="screen-card hidden h-[80vh]">
+            <h2 class="text-2xl font-bold mb-4 text-indigo-700 text-center">Mock Interview</h2>
+            <div id="chat-box" class="chat-box">
+                <!-- Chat messages will be appended here -->
+            </div>
+            <div class="flex flex-col items-center space-y-4">
+                <!-- Text input removed for voice-only -->
+                <button id="mic-button" class="btn-primary p-4 rounded-full w-20 h-20 flex items-center justify-center" title="Start/Stop Speaking">
+                    <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <svg id="stop-mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-300 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                    </svg>
+                </button>
+                <p id="listening-status" class="text-center text-sm text-gray-600"></p>
+                <button id="exit-interview-button-on-screen" class="btn-secondary mt-4">Exit Interview</button>
+            </div>
+        </div>
+
+        <!-- Feedback Screen -->
+        <div id="feedback-screen" class="screen-card hidden">
+            <h2 class="text-3xl font-bold mb-6 text-indigo-700 text-center">Interview Feedback</h2>
+
+            <div id="technical-feedback" class="feedback-section mb-6">
+                <h3 class="text-xl font-semibold mb-2">Technical Knowledge</h3>
+                <p class="text-lg mb-2">Rating: <span id="tech-rating" class="font-bold"></span>/5</p>
+                <h4 class="font-medium mb-1">Tips for Improvement:</h4>
+                <ul id="tech-tips"></ul>
+            </div>
+
+            <div id="hr-feedback" class="feedback-section">
+                <h3 class="text-xl font-semibold mb-2">Communication Skills</h3>
+                <p class="text-lg mb-2">Rating: <span id="hr-rating" class="font-bold"></span>/5</p>
+                <h4 class="font-medium mb-1">Tips for Improvement:</h4>
+                <ul id="hr-tips"></ul>
+            </div>
+
+            <div class="text-center mt-8 space-x-4">
+                <button id="finish-interview-button" class="btn-primary">Back to Main Menu</button>
+            </div>
+        </div>
+
+        <!-- History Screen -->
+        <div id="history-screen" class="screen-card hidden">
+            <h2 class="text-3xl font-bold mb-6 text-indigo-700 text-center">Interview History</h2>
+            <div id="history-list" class="space-y-4">
+                <!-- History items will be loaded here -->
+            </div>
+            <div class="text-center mt-8">
+                <button id="back-to-main-menu-from-history" class="btn-secondary">Back to Main Menu</button>
+            </div>
+        </div>
+
+
+        <!-- Loading/Warning Modal -->
+        <div id="modal-overlay" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div id="modal-loader" class="loader hidden"></div>
+                <p id="modal-message" class="text-lg font-medium text-gray-700"></p>
+                <div class="flex justify-center space-x-4 mt-4">
+                    <button id="modal-confirm-button" class="btn-primary hidden">Confirm</button>
+                    <button id="modal-cancel-button" class="btn-secondary hidden">Cancel</button>
+                    <button id="modal-close-button" class="btn-primary hidden">OK</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const BACKEND_URL = ""; // Served from same origin now
+        let accessToken = localStorage.getItem('access_token');
+        let currentInterviewSessionId = null;
+        let recognition;
+        let synth;
+        let isListening = false;
+        let currentUtterance = null; // To keep track of the current speech utterance
+        let modalCallback = null; // Callback for modal confirmation
+
+        // NEW: Variables for speech recognition pause tolerance
+        let recognitionTimeout;
+        const PAUSE_TIMEOUT_MS = 2000; // 2 seconds of silence to consider speech ended
+
+        // UI Elements
+        const appContainer = document.getElementById('app'); // Get the app container
+        const authScreen = document.getElementById('auth-screen');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const loginUsernameInput = document.getElementById('login-username');
+        const loginPasswordInput = document.getElementById('login-password');
+        const loginButton = document.getElementById('login-button');
+        const showRegisterLink = document.getElementById('show-register');
+        const registerUsernameInput = document.getElementById('register-username');
+        const registerPasswordInput = document.getElementById('register-password');
+        const registerButton = document.getElementById('register-button');
+        const showLoginLink = document.getElementById('show-login');
+
+        const mainMenuScreen = document.getElementById('main-menu-screen');
+        const startNewInterviewButton = document.getElementById('start-new-interview-button');
+        const viewHistoryButton = document.getElementById('view-history-button');
+        const logoutButton = document.getElementById('logout-button');
+
+        const uploadScreen = document.getElementById('upload-screen');
+        const resumeFileInput = document.getElementById('resume-file-input');
+        const uploadResumeButton = document.getElementById('upload-resume-button');
+        const uploadStatus = document.getElementById('upload-status');
+
+        const interviewScreen = document.getElementById('interview-screen');
+        const chatBox = document.getElementById('chat-box');
+        const micButton = document.getElementById('mic-button');
+        const micIcon = document.getElementById('mic-icon');
+        const stopMicIcon = document.getElementById('stop-mic-icon');
+        const listeningStatus = document.getElementById('listening-status');
+        const exitInterviewButtonOnScreen = document.getElementById('exit-interview-button-on-screen');
+
+
+        const feedbackScreen = document.getElementById('feedback-screen');
+        const techRating = document.getElementById('tech-rating');
+        const techTips = document.getElementById('tech-tips');
+        const hrRating = document.getElementById('hr-rating');
+        const hrTips = document.getElementById('hr-tips');
+        const finishInterviewButton = document.getElementById('finish-interview-button');
+
+        const historyScreen = document.getElementById('history-screen');
+        const historyList = document.getElementById('history-list');
+        const backToMainMenuFromHistoryButton = document.getElementById('back-to-main-menu-from-history');
+
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalLoader = document.getElementById('modal-loader');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const modalConfirmButton = document.getElementById('modal-confirm-button');
+        const modalCancelButton = document.getElementById('modal-cancel-button');
+
+
+        // --- Utility Functions ---
+
+        function showScreen(screenElement) {
+            const screens = [authScreen, mainMenuScreen, uploadScreen, interviewScreen, feedbackScreen, historyScreen];
+            screens.forEach(screen => screen.classList.add('hidden')); // Hide all
+            screenElement.classList.remove('hidden'); // Show the target screen
+        }
+
+        // Updated showModal to correctly handle callbacks
+        function showModal(message, showLoader = false, showConfirm = false, showCancel = false, callback = null) {
+            modalMessage.textContent = message;
+            modalLoader.classList.toggle('hidden', !showLoader);
+            modalConfirmButton.classList.toggle('hidden', !showConfirm);
+            modalCancelButton.classList.toggle('hidden', !showCancel);
+            modalCloseButton.classList.toggle('hidden', showConfirm || showCancel); // Hide OK if confirm/cancel present
+
+            // Clear previous listeners to prevent multiple calls
+            const clearListeners = () => {
+                modalConfirmButton.onclick = null;
+                modalCancelButton.onclick = null;
+                modalCloseButton.onclick = null;
+            };
+            clearListeners(); // Clear before adding new ones
+
+            if (showConfirm || showCancel) {
+                modalConfirmButton.onclick = () => {
+                    hideModal();
+                    clearListeners(); // Clear after use
+                    if (callback) callback(true);
+                };
+                modalCancelButton.onclick = () => {
+                    hideModal();
+                    clearListeners(); // Clear after use
+                    if (callback) callback(false);
+                };
+            } else {
+                modalCloseButton.onclick = () => {
+                    hideModal();
+                    clearListeners(); // Clear after use
+                    if (callback) callback(); // For simple OK, just execute
+                };
+            }
+
+            modalOverlay.classList.remove('hidden');
+        }
+
+        function hideModal() {
+            modalOverlay.classList.add('hidden');
+            // No need to clear modalCallback here, as it's handled by specific button clicks
+        }
+
+
+        function appendMessage(role, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chat-bubble', role === 'ai' ? 'ai-bubble' : 'user-bubble');
+            messageDiv.textContent = text;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // --- Fullscreen API ---
+        function requestFullscreen() {
+            const element = document.documentElement;
+            if (element.requestFullscreen) {
+                element.requestFullscreen();
+            } else if (element.mozRequestFullScreen) {
+                element.mozRequestFullScreen();
+            } else if (element.webkitRequestFullscreen) {
+                element.webkitRequestFullscreen();
+            } else if (element.msRequestFullscreen) {
+                element.msRequestFullscreen();
+            }
+        }
+
+        function exitFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                document.mozCancelFullScreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullScreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+
+        function handleFullscreenChange() {
+            if (document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                console.log("Entered fullscreen.");
+            } else {
+                // Only show the prompt if we are currently in the interview screen
+                if (!interviewScreen.classList.contains('hidden')) {
+                    showModal("Exiting full screen during interview is not allowed. Exit interview?", false, true, true, (confirmed) => {
+                        if (confirmed) {
+                            handleExitInterview(true); // User confirmed to exit
+                        } else {
+                            requestFullscreen(); // User cancelled, try to re-enter fullscreen
+                        }
+                    });
+                } else {
+                    console.log("Exited fullscreen outside interview mode. No special action needed.");
+                }
+            }
+        }
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+        // --- Speech Recognition (STT) ---
+        function setupSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = true; // NEW: Set to true for continuous listening
+                recognition.interimResults = true; // Get interim results for live transcription
+                recognition.lang = 'en-US';
+
+                let finalTranscript = ''; // Stores the accumulated final transcript for the current utterance
+                let recognitionActiveTimer; // Timer for silence detection
+
+                const startSilenceTimer = () => {
+                    clearTimeout(recognitionActiveTimer);
+                    recognitionActiveTimer = setTimeout(() => {
+                        recognition.stop(); // Stop recognition if silence exceeds PAUSE_TIMEOUT_MS
+                    }, PAUSE_TIMEOUT_MS);
+                };
+
+                recognition.onstart = () => {
+                    isListening = true;
+                    micIcon.classList.add('hidden');
+                    stopMicIcon.classList.remove('hidden');
+                    listeningStatus.textContent = 'Listening... Speak now.';
+                    finalTranscript = ''; // Reset for new utterance
+                    clearTimeout(recognitionTimeout); // Clear any previous timeout
+                    startSilenceTimer(); // Start silence timer when recognition begins
+                };
+
+                recognition.onresult = (event) => {
+                    clearTimeout(recognitionActiveTimer); // Reset silence timer on any new result
+                    startSilenceTimer(); // Restart the timer
+
+                    let currentInterim = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        } else {
+                            currentInterim += event.results[i][0].transcript;
+                        }
+                    }
+                    // Update live transcription display
+                    listeningStatus.textContent = finalTranscript + currentInterim;
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    listeningStatus.textContent = `Error: ${event.error}. Try again.`;
+                    isListening = false;
+                    micIcon.classList.remove('hidden');
+                    stopMicIcon.classList.add('hidden');
+                    clearTimeout(recognitionTimeout); // Clear timeout on error
+                    clearTimeout(recognitionActiveTimer); // Clear silence timer on error
+                    showModal(`Speech recognition error: ${event.error}. Please try again.`, false, false, false, () => {
+                        micButton.disabled = false;
+                    });
+                };
+
+                recognition.onend = () => {
+                    isListening = false;
+                    micIcon.classList.remove('hidden');
+                    stopMicIcon.classList.add('hidden');
+                    listeningStatus.textContent = ''; // Clear live transcript display
+                    clearTimeout(recognitionTimeout); // Ensure timeout is cleared
+                    clearTimeout(recognitionActiveTimer); // Ensure silence timer is cleared
+
+                    // Send the accumulated final transcript
+                    if (finalTranscript.trim() !== '') {
+                        sendAnswer(finalTranscript);
+                    } else {
+                        // If onend fires but no final speech was captured (e.g., just silence timeout),
+                        // and we are still in interview, re-enable mic for another attempt.
+                        if (!interviewScreen.classList.contains('hidden')) {
+                            micButton.disabled = false; 
+                            listeningStatus.textContent = 'No speech detected. Please try again.';
+                        }
+                    }
+                };
+            } else {
+                micButton.disabled = true;
+                listeningStatus.textContent = 'Speech Recognition not supported in this browser. Please use a modern browser like Chrome or Edge.';
+                showModal("Speech Recognition not supported in this browser. This interview requires voice input. Please use a modern browser like Chrome or Edge.", false, false, false, () => {
+                    handleExitInterview(true); // Force exit interview if speech not supported
+                });
+            }
+        }
+
+        // --- Speech Synthesis (TTS) ---
+        function setupSpeechSynthesis() {
+            if ('SpeechSynthesisUtterance' in window) {
+                synth = window.speechSynthesis;
+            } else {
+                showModal("Text-to-Speech not supported in this browser. AI responses will only be displayed as text.", false, false, false, () => {
+                    // No action needed, just inform
+                });
+            }
+        }
+
+        function speakText(text) {
+            if (synth) {
+                if (currentUtterance && synth.speaking) {
+                    synth.cancel();
+                }
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.onend = () => {
+                    currentUtterance = null;
+                    // Automatically start listening after AI finishes speaking
+                    if (!interviewScreen.classList.contains('hidden')) { // Only if still in interview screen
+                        micButton.disabled = false; // Re-enable mic button
+                        recognition.start(); // Auto-turn on mic
+                    } else {
+                        micButton.disabled = false; // If somehow not in interview, just enable mic
+                    }
+                };
+                utterance.onerror = (event) => {
+                    console.error('Speech synthesis error:', event.error);
+                    currentUtterance = null;
+                    micButton.disabled = false; // Re-enable mic after error
+                };
+                synth.speak(utterance);
+                micButton.disabled = true; // Disable mic while AI is speaking
+                currentUtterance = utterance; // Store current utterance
+            } else {
+                micButton.disabled = false; // Re-enable mic if TTS not supported
+                // Automatically start listening if TTS not supported and AI finished speaking
+                if (!interviewScreen.classList.contains('hidden')) { // Only if still in interview screen
+                    recognition.start(); // Auto-turn on mic
+                }
+            }
+        }
+
+        // --- API Calls ---
+        async function apiCall(endpoint, method = 'POST', body = null, isFormData = false) {
+            const headers = {};
+            if (accessToken) {
+                headers['Authorization'] = `Bearer ${accessToken}`;
+            }
+
+            const options = {
+                method: method,
+                headers: isFormData ? headers : { 'Content-Type': 'application/json', ...headers },
+            };
+
+            if (body) {
+                options.body = isFormData ? body : JSON.stringify(body);
+            }
+
+            const response = await fetch(`${BACKEND_URL}${endpoint}`, options);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `API call to ${endpoint} failed.`);
+            }
+            return response.json();
+        }
+
+        // --- Authentication Flow ---
+        async function handleRegister() {
+            const username = registerUsernameInput.value.trim();
+            const password = registerPasswordInput.value.trim();
+
+            if (!username || !password) {
+                showModal("Please enter both username and password.", false, false, false, hideModal);
+                return;
+            }
+
+            showModal("Registering user...", true);
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/register`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Registration failed.');
+                }
+
+                showModal("Registration successful! You can now log in.", false, false, false, () => {
+                    hideModal();
+                    showLogin();
+                });
+            } catch (error) {
+                console.error('Registration error:', error);
+                showModal(`Error: ${error.message}`, false, false, false, hideModal);
+            }
+        }
+
+        async function handleLogin() {
+            const username = loginUsernameInput.value.trim();
+            const password = loginPasswordInput.value.trim();
+
+            if (!username || !password) {
+                showModal("Please enter both username and password.", false, false, false, hideModal);
+                return;
+            }
+
+            showModal("Logging in...", true);
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/token`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Login failed.');
+                }
+
+                const data = await response.json();
+                accessToken = data.access_token;
+                localStorage.setItem('access_token', accessToken);
+                hideModal();
+                showScreen(mainMenuScreen); // Pass element reference
+            } catch (error) {
+                console.error('Login error:', error);
+                showModal(`Error: ${error.message}`, false, false, false, hideModal);
+            }
+        }
+
+        function handleLogout() {
+            accessToken = null;
+            localStorage.removeItem('access_token');
+            showScreen(authScreen); // Pass element reference
+            loginUsernameInput.value = '';
+            loginPasswordInput.value = '';
+            registerUsernameInput.value = '';
+            registerPasswordInput.value = '';
+            loginForm.classList.remove('hidden');
+            registerForm.classList.add('hidden');
+        }
+
+        function showLogin() {
+            loginForm.classList.remove('hidden');
+            registerForm.classList.add('hidden');
+        }
+
+        function showRegister() {
+            loginForm.classList.add('hidden');
+            registerForm.classList.remove('hidden');
+        }
+
+        // --- Interview Flow Functions ---
+
+        async function startNewInterviewProcess() {
+            showScreen(uploadScreen); // Pass element reference
+            resumeFileInput.value = ''; // Clear previous file
+            uploadStatus.textContent = '';
+            uploadResumeButton.disabled = false;
+            resumeFileInput.disabled = false;
+        }
+
+        async function uploadResumeAndPrepareInterview() {
+            const file = resumeFileInput.files[0];
+            if (!file) {
+                showModal("Please select a resume file to upload.", false, false, false, hideModal);
+                return;
+            }
+
+            showModal("Uploading and processing resume... This may take a moment.", true);
+            uploadResumeButton.disabled = true;
+            resumeFileInput.disabled = true;
+
+            const formData = new FormData();
+            formData.append('resume_file', file);
+
+            try {
+                const response = await apiCall('/upload_resume', 'POST', formData, true);
+                currentInterviewSessionId = response.interview_session_id;
+                console.log("New interview session ID:", currentInterviewSessionId);
+                hideModal();
+                showScreen(interviewScreen); // Pass element reference
+                requestFullscreen(); // Request fullscreen on interview start
+                startInterview();
+
+            } catch (error) {
+                console.error('Resume upload error:', error);
+                showModal(`Error: ${error.message}. Please try again.`, false, false, false, () => {
+                    hideModal();
+                    uploadResumeButton.disabled = false;
+                    resumeFileInput.disabled = false;
+                });
+            }
+        }
+
+        async function startInterview() {
+            chatBox.innerHTML = ''; // Clear chat history for new interview
+            appendMessage('ai', "Starting interview... AI is preparing the first question."); // Initial message
+
+            showModal("Starting interview... AI is preparing the first question.", true);
+            try {
+                const formData = new FormData();
+                formData.append('interview_session_id', currentInterviewSessionId);
+
+                const data = await apiCall('/start_interview', 'POST', formData, true);
+                appendMessage('ai', data.question);
+                speakText(data.question);
+                hideModal();
+                // Mic will auto-start via speakText.onend
+            } catch (error) {
+                console.error('Error starting interview:', error);
+                showModal(`Error: ${error.message}. Please refresh the page.`, false, false, false, hideModal);
+            }
+        }
+
+        async function sendAnswer(answer) {
+            if (!answer || !answer.trim()) {
+                // Do NOT show modal for empty answer if it's due to pause timeout
+                // Instead, just re-enable mic and prompt user to speak again
+                if (!isListening) { // Only if mic is not actively listening (i.e., it stopped due to silence)
+                    micButton.disabled = false;
+                    listeningStatus.textContent = 'No speech detected. Please try again.';
+                }
+                return;
+            }
+
+            appendMessage('user', answer);
+            micButton.disabled = true; // Disable mic while processing
+            listeningStatus.textContent = 'Processing your answer and generating next question...'; // Show status without modal
+
+            try {
+                const formData = new FormData();
+                formData.append('interview_session_id', currentInterviewSessionId);
+                formData.append('user_answer', answer);
+
+                const data = await apiCall('/submit_answer', 'POST', formData, true);
+
+                if (data.status === 'interview_finished') {
+                    listeningStatus.textContent = ''; // Clear status
+                    getFeedback();
+                } else {
+                    appendMessage('ai', data.question);
+                    speakText(data.question);
+                    listeningStatus.textContent = ''; // Clear status
+                    // Mic will auto-start via speakText.onend
+                }
+
+            } catch (error) {
+                console.error('Error submitting answer:', error);
+                listeningStatus.textContent = `Error: ${error.message}. Please try again.`; // Show error in status
+                showModal(`Error: ${error.message}. Please try again or refresh.`, false, false, false, () => {
+                    hideModal();
+                    micButton.disabled = false; // Re-enable mic after error
+                });
+            }
+        }
+
+        async function getFeedback() {
+            showModal("Interview finished! Generating your personalized feedback...", true);
+            try {
+                const formData = new FormData();
+                formData.append('interview_session_id', currentInterviewSessionId);
+
+                const data = await apiCall('/get_feedback', 'POST', formData, true);
+                console.log("Feedback data:", data);
+
+                // Display Technical Feedback
+                techRating.textContent = data.technical_feedback.technical_knowledge_rating;
+                techTips.innerHTML = '';
+                data.technical_feedback.technical_tips.forEach(tip => {
+                    const li = document.createElement('li');
+                    li.textContent = tip;
+                    techTips.appendChild(li);
+                });
+
+                // Display HR Feedback
+                hrRating.textContent = data.hr_feedback.communication_skills_rating;
+                hrTips.innerHTML = '';
+                data.hr_feedback.communication_tips.forEach(tip => {
+                    const li = document.createElement('li');
+                    li.textContent = tip;
+                    hrTips.appendChild(li);
+                });
+
+                hideModal();
+                showScreen(feedbackScreen); // Pass element reference
+
+            } catch (error) {
+                console.error('Error getting feedback:', error);
+                showModal(`Error getting feedback: ${error.message}. Please refresh.`, false, false, false, hideModal);
+            }
+        }
+
+        async function viewHistory() {
+            showModal("Loading interview history...", true);
+            try {
+                const history = await apiCall('/history', 'GET');
+                historyList.innerHTML = ''; // Clear previous history
+
+                if (history.length === 0) {
+                    historyList.innerHTML = '<p class="text-center text-gray-600">No interview history found.</p>';
+                } else {
+                    history.forEach(session => {
+                        const sessionDiv = document.createElement('div');
+                        sessionDiv.classList.add('history-item');
+                        sessionDiv.innerHTML = `
+                            <div class="history-item-header">
+                                <h3 class="text-lg font-semibold">Interview on ${new Date(session.start_time).toLocaleString()}</h3>
+                                <button class="btn-secondary toggle-history-details px-3 py-1 text-sm">View Details</button>
+                            </div>
+                            <div class="history-item-body">
+                                <p class="text-sm text-gray-500 mb-2">Resume: ${session.resume_snippet}</p>
+                                ${session.github_summary && session.github_summary.length > 0 ?
+                                `<p class="text-sm text-gray-500 mb-2">GitHub Projects: ${session.github_summary.join(', ')}</p>` : ''}
+                                <h4 class="font-medium mt-4 mb-1">Conversation:</h4>
+                                <div class="border border-gray-200 p-2 rounded max-h-40 overflow-y-auto text-sm">
+                                    ${session.conversation.map(msg => `<p class="${msg.role === 'ai' ? 'text-blue-700' : 'text-indigo-700'}"><strong>${msg.role.toUpperCase()}:</strong> ${msg.text}</p>`).join('')}
+                                </div>
+                                ${session.technical_feedback ? `
+                                <h4 class="font-medium mt-4 mb-1">Technical Feedback:</h4>
+                                <p class="text-sm">Rating: ${session.technical_feedback.rating}/5</p>
+                                <ul class="list-disc ml-4 text-sm">
+                                    ${session.technical_feedback.tips.map(tip => `<li>${tip}</li>`).join('')}
+                                </ul>` : '<p class="text-sm text-gray-500 mt-4">Technical feedback not available.</p>'}
+                                ${session.hr_feedback ? `
+                                <h4 class="font-medium mt-4 mb-1">HR Feedback:</h4>
+                                <p class="text-sm">Rating: ${session.hr_feedback.rating}/5</p>
+                                <ul class="list-disc ml-4 text-sm">
+                                    ${session.hr_feedback.tips.map(tip => `<li>${tip}</li>`).join('')}
+                                </ul>` : '<p class="text-sm text-gray-500 mt-4">HR feedback not available.</p>'}
+                            </div>
+                        `;
+                        historyList.appendChild(sessionDiv);
+                    });
+
+                    // Add event listeners for toggle buttons
+                    document.querySelectorAll('.toggle-history-details').forEach(button => {
+                        button.addEventListener('click', (event) => {
+                            const body = event.target.closest('.history-item').querySelector('.history-item-body');
+                            body.classList.toggle('expanded');
+                            event.target.textContent = body.classList.contains('expanded') ? 'Hide Details' : 'View Details';
+                        });
+                    });
+                }
+
+                hideModal();
+                showScreen(historyScreen); // Pass element reference
+
+            } catch (error) {
+                console.error('Error fetching history:', error);
+                showModal(`Error loading history: ${error.message}.`, false, false, false, hideModal);
+            }
+            }
+
+        function handleExitInterview(fromFullscreenExit = false) {
+            // If called from fullscreen exit, the modal is already open.
+            // If called from the on-screen button, open the modal.
+            if (!fromFullscreenExit) {
+                showModal("Are you sure you want to exit the current interview? Your progress will be saved.", false, true, true, (confirmed) => {
+                    if (confirmed) {
+                        exitFullscreen(); // Ensure fullscreen is exited
+                        currentInterviewSessionId = null;
+                        chatBox.innerHTML = ''; // Clear chat
+                        micButton.disabled = false; // Ensure mic is enabled for next interview
+                        showScreen(mainMenuScreen); // Navigate to main menu
+                    }
+                    // If not confirmed, do nothing and stay in interview
+                });
+            } else {
+                // This branch is executed when the modal is already shown by handleFullscreenChange
+                // The callback from showModal will handle the navigation/re-entry.
+                // It means the user chose to exit via the modal.
+                exitFullscreen(); // Ensure fullscreen is exited
+                currentInterviewSessionId = null;
+                chatBox.innerHTML = ''; // Clear chat
+                micButton.disabled = false; // Ensure mic is enabled for next interview
+                showScreen(mainMenuScreen); // Navigate to main menu
+            }
+        }
+
+
+        // --- Event Listeners ---
+        loginButton.addEventListener('click', handleLogin);
+        registerButton.addEventListener('click', handleRegister);
+        showRegisterLink.addEventListener('click', (e) => { e.preventDefault(); showRegister(); });
+        showLoginLink.addEventListener('click', (e) => { e.preventDefault(); showLogin(); });
+
+        startNewInterviewButton.addEventListener('click', startNewInterviewProcess);
+        viewHistoryButton.addEventListener('click', viewHistory);
+        logoutButton.addEventListener('click', handleLogout);
+
+        uploadResumeButton.addEventListener('click', uploadResumeAndPrepareInterview);
+        
+        micButton.addEventListener('click', () => {
+            if (isListening) {
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        });
+
+        finishInterviewButton.addEventListener('click', () => {
+            exitFullscreen();
+            currentInterviewSessionId = null;
+            showScreen(mainMenuScreen); // Pass element reference
+        });
+        backToMainMenuFromHistoryButton.addEventListener('click', () => {
+            showScreen(mainMenuScreen); // Pass element reference
+        });
+
+        exitInterviewButtonOnScreen.addEventListener('click', handleExitInterview);
+
+
+        // --- Initial Setup and Check ---
+        setupSpeechRecognition();
+        setupSpeechSynthesis();
+        micButton.disabled = true; // Initially disabled until interview starts
+
+        // Check if user is already logged in
+        if (accessToken) {
+            showScreen(mainMenuScreen); // Pass element reference
+        } else {
+            showScreen(authScreen); // Pass element reference
+        }
+
+        // NEW: Add a class to #app once JS is initialized to control initial display
+        document.addEventListener('DOMContentLoaded', () => {
+            appContainer.classList.add('initialized');
+            // Re-run showScreen to ensure correct screen is visible after initialization
+            if (accessToken) {
+                showScreen(mainMenuScreen);
+            } else {
+                showScreen(authScreen);
+            }
+        });
+
+    </script>
+</body>
+</html>
