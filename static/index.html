@@ -268,7 +268,6 @@
         }
         .history-item-body p {
             margin-bottom: 0.3rem;
-        
         }
     </style>
 </head>
@@ -290,7 +289,7 @@
                     <input type="password" id="login-password" class="input-field" placeholder="Enter your password">
                 </div>
                 <button id="login-button" class="btn-primary w-full mb-4">Login</button>
-                <p class="text-center text-gray-600">Dont have an account? <a href="#" id="show-register" class="text-indigo-600 hover:underline">Register here</a></p>
+                <p class="text-center text-gray-600">Don't have an account? <a href="#" id="show-register" class="text-indigo-600 hover:underline">Register here</a></p>
             </div>
 
             <div id="register-form" class="hidden">
@@ -623,6 +622,10 @@
                     }
                     // Update live transcription display
                     listeningStatus.textContent = finalTranscript + currentInterim;
+                    
+                    // If the last result was final, it means a segment completed.
+                    // The silence timer will handle stopping if no more speech.
+                    // No need to explicitly stop here.
                 };
 
                 recognition.onerror = (event) => {
@@ -753,7 +756,7 @@
             formData.append('password', password);
 
             try {
-                const response = await fetch(`${BACKEND_URL}/register`, {
+                const response = await fetch(`${BACKEND_URL}/api/auth/register`, { // Updated endpoint
                     method: 'POST',
                     body: formData
                 });
@@ -788,7 +791,7 @@
             formData.append('password', password);
 
             try {
-                const response = await fetch(`${BACKEND_URL}/token`, {
+                const response = await fetch(`${BACKEND_URL}/api/auth/token`, { // Updated endpoint
                     method: 'POST',
                     body: formData
                 });
@@ -856,7 +859,7 @@
             formData.append('resume_file', file);
 
             try {
-                const response = await apiCall('/upload_resume', 'POST', formData, true);
+                const response = await apiCall('/api/interview/upload_resume', 'POST', formData, true); // Updated endpoint
                 currentInterviewSessionId = response.interview_session_id;
                 console.log("New interview session ID:", currentInterviewSessionId);
                 hideModal();
@@ -883,7 +886,7 @@
                 const formData = new FormData();
                 formData.append('interview_session_id', currentInterviewSessionId);
 
-                const data = await apiCall('/start_interview', 'POST', formData, true);
+                const data = await apiCall('/api/interview/start_interview', 'POST', formData, true); // Updated endpoint
                 appendMessage('ai', data.question);
                 speakText(data.question);
                 hideModal();
@@ -914,7 +917,7 @@
                 formData.append('interview_session_id', currentInterviewSessionId);
                 formData.append('user_answer', answer);
 
-                const data = await apiCall('/submit_answer', 'POST', formData, true);
+                const data = await apiCall('/api/interview/submit_answer', 'POST', formData, true); // Updated endpoint
 
                 if (data.status === 'interview_finished') {
                     listeningStatus.textContent = ''; // Clear status
@@ -942,7 +945,7 @@
                 const formData = new FormData();
                 formData.append('interview_session_id', currentInterviewSessionId);
 
-                const data = await apiCall('/get_feedback', 'POST', formData, true);
+                const data = await apiCall('/api/interview/get_feedback', 'POST', formData, true); // Updated endpoint
                 console.log("Feedback data:", data);
 
                 // Display Technical Feedback
@@ -975,7 +978,7 @@
         async function viewHistory() {
             showModal("Loading interview history...", true);
             try {
-                const history = await apiCall('/history', 'GET');
+                const history = await apiCall('/api/history/', 'GET'); // Updated endpoint
                 historyList.innerHTML = ''; // Clear previous history
 
                 if (history.length === 0) {
